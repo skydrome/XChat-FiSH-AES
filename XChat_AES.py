@@ -503,15 +503,15 @@ class SecretKey(object):
         self.aes = False
 
 def set_processing():
-        id_ = xchat.get_info('server')
+        id_ = hexchat.get_info('server')
         LOCK_MAP[id_] = True
 
 def unset_processing():
-        id_ = xchat.get_info('server')
+        id_ = hexchat.get_info('server')
         LOCK_MAP[id_] = False
 
 def is_processing():
-        id_ = xchat.get_info('server')
+        id_ = hexchat.get_info('server')
         return LOCK_MAP.get(id_, False)
 
 def get_id(ctx):
@@ -527,7 +527,7 @@ def get_id_for(ctx, speaker):
 
 def unload(userdata):
         tmp_map = KeyMap()
-        encrypted_file = os.path.join(xchat.get_info('xchatdir'),
+        encrypted_file = os.path.join(hexchat.get_info('configdir'),
         'XChatAES_secure.pickle')
         if os.path.exists(encrypted_file):
             return
@@ -536,7 +536,7 @@ def unload(userdata):
                 tmp_map[id_] = key
                 key.dh = None
         if KEYPASS!='':
-            with open(os.path.join(xchat.get_info('xchatdir'),
+            with open(os.path.join(hexchat.get_info('configdir'),
            'XChatAES.pickle'), 'wb') as f:
                 pickle.dump(tmp_map, f)
                 print 'Passwords saved!'
@@ -553,7 +553,7 @@ def decrypt(key, inp, mode):
             b = decrypt_clz(key.key)
         return decrypt_func(inp, b)
 
-def encrypt(key, inp, mode):        
+def encrypt(key, inp, mode):
         if mode == '+':
             encrypt_clz = AESCBC
             encrypt_func = aes_cbc_pack
@@ -568,11 +568,11 @@ def encrypt(key, inp, mode):
 
 def decrypt_print(word, word_eol, userdata):
         if is_processing():
-            return xchat.EAT_NONE
-        ctx = xchat.get_context()
+            return hexchat.EAT_NONE
+        ctx = hexchat.get_context()
         id_ = get_id(ctx)
         if id_ not in KEY_MAP:
-            return xchat.EAT_NONE
+            return hexchat.EAT_NONE
         speaker, message = word[0], word_eol[1]
         if len(word_eol) >= 3:
             message = message[ : -(len(word_eol[2]) + 1)]
@@ -581,25 +581,25 @@ def decrypt_print(word, word_eol, userdata):
             set_processing()
             ctx.emit_print(userdata, speaker+" +", message)
             unset_processing()
-            return xchat.EAT_XCHAT
+            return hexchat.EAT_HEXCHAT
         if message.startswith('+OK '):
             message = decrypt(KEY_MAP[id_], message,'bfs')
             set_processing()
             ctx.emit_print(userdata, speaker +" -", message)
             unset_processing()
-            return xchat.EAT_XCHAT
+            return hexchat.EAT_HEXCHAT
         else:
             set_processing()
             ctx.emit_print(userdata, speaker +" !", message)
             unset_processing()
-            return xchat.EAT_XCHAT
+            return hexchat.EAT_HEXCHAT
 
 def encrypt_privmsg(word, word_eol, userdata):
         message = word_eol[0]
-        ctx = xchat.get_context()
+        ctx = hexchat.get_context()
         id_ = get_id(ctx)
         if id_ not in KEY_MAP:
-            return xchat.EAT_NONE
+            return hexchat.EAT_NONE
         key = KEY_MAP[id_]
         if not key.key or message.startswith(PLAINTEXT_MARKER):
             cipherMode='!'
@@ -617,15 +617,15 @@ def encrypt_privmsg(word, word_eol, userdata):
         while (len(message)>0):
             messageSplit=""
             if (len(message)>LINELEN):
-                messageSplit=message[LINELEN:]                   
+                messageSplit=message[LINELEN:]
             cipher = encrypt(key, message[0:LINELEN],cipherMode)
-            xchat.command('PRIVMSG %s :%s' % (id_[0], cipher))
-            xchat.emit_print('Your Message', xchat.get_info('nick')+" "+cipherMode, message)
+            hexchat.command('PRIVMSG %s :%s' % (id_[0], cipher))
+            hexchat.emit_print('Your Message', hexchat.get_info('nick')+" "+cipherMode, message)
             message=messageSplit
-        return xchat.EAT_ALL
+        return hexchat.EAT_ALL
 
 def key(word, word_eol, userdata):
-        ctx = xchat.get_context()
+        ctx = hexchat.get_context()
         target = ctx.get_info('channel')
         if len(word) >= 2:
             target = word[1]
@@ -646,10 +646,10 @@ def key(word, word_eol, userdata):
         KEY_MAP[id_] = key
         KEY_MAP[id_].hashKey=sha256(key.key)
         print 'Key for', id_, 'set to', key.key, "( AES =",key.aes,")"
-        return xchat.EAT_ALL
+        return hexchat.EAT_ALL
 
 def key_exchange(word, word_eol, userdata):
-            ctx = xchat.get_context()
+            ctx = hexchat.get_context()
             target = ctx.get_info('channel')
             if len(word) >= 2:
                 target = word[1]
@@ -657,25 +657,25 @@ def key_exchange(word, word_eol, userdata):
                 dh = DH1080Ctx()
                 KEY_MAP[id_] = SecretKey(dh)
                 ctx.command('NOTICE %s %s' % (target, dh1080_pack(dh)))
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def dh1080_finish(word, word_eol, userdata):
-            ctx = xchat.get_context()
+            ctx = hexchat.get_context()
             #speaker, command, target, message = word[0], word[1], word[2], word_eol[3]
             speaker, message = word[0], word_eol[3]
             id_ = get_id_for(ctx, speaker)
             print 'dh1080_finish', id_
             if id_ not in KEY_MAP:
-                return xchat.EAT_NONE
+                return hexchat.EAT_NONE
             key = KEY_MAP[id_]
             dh1080_unpack(message[1 : ], key.dh)
             key.key = dh1080_secret(key.dh)
             key.hashKey=sha256(key.key)
             print 'Key for', id_[0], 'set to', key.key
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def dh1080_init(word, word_eol, userdata):
-            ctx = xchat.get_context()
+            ctx = hexchat.get_context()
             speaker, message = word[0], word_eol[3]
             id_ = get_id_for(ctx, speaker)
             key = SecretKey(None)
@@ -683,17 +683,17 @@ def dh1080_init(word, word_eol, userdata):
             dh1080_unpack(message[1 : ], dh)
             key.key = dh1080_secret(dh)
             key.hashKey=sha256(key.key)
-            xchat.command('NOTICE %s %s' % (id_[0], dh1080_pack(dh)))
+            hexchat.command('NOTICE %s %s' % (id_[0], dh1080_pack(dh)))
             KEY_MAP[id_] = key
             print 'Key for', id_[0], 'set to', key.key
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def dh1080(word, word_eol, userdata):
             if word_eol[3].startswith(':DH1080_FINISH'):
                 return dh1080_finish(word, word_eol, userdata)
             elif word_eol[3].startswith(':DH1080_INIT'):
                 return dh1080_init(word, word_eol, userdata)
-            return xchat.EAT_NONE
+            return hexchat.EAT_NONE
 
 def load():
             print 'XChatAES loaded'
@@ -702,27 +702,27 @@ def key_pass(word, word_eol, userdata):
         global KEYPASS
         KEYPASS=sha256(word[1])
         print 'key pass =',word[1]
-        return xchat.EAT_ALL
+        return hexchat.EAT_ALL
 
 def key_load(word, word_eol, userdata):
             global KEY_MAP
             try:
-                with open(os.path.join(xchat.get_info('xchatdir'),
+                with open(os.path.join(hexchat.get_info('configdir'),
                 'XChatAES.pickle'), 'rb') as f:
                     KEY_MAP = pickle.load(f)
             except IOError:
                 pass
             print 'keys loaded'
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def key_list(word, word_eol, userdata):
             print 'Found', len(KEY_MAP), 'key(s)'
             for id_, key in KEY_MAP.iteritems():
                 print id_, key.key, "( AES =",key.aes,")"
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def key_remove(word, word_eol, userdata):
-            id_ = (word[1], xchat.get_info('server'))
+            id_ = (word[1], hexchat.get_info('server'))
             if id_ not in KEY_MAP and len(word) > 2:
                 id_ = (word[1], word[2])
             try:
@@ -731,39 +731,39 @@ def key_remove(word, word_eol, userdata):
                 print 'Key not found'
             else:
                 print 'Key removed'
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def server_332(word, word_eol, userdata):
             if is_processing():
-                return xchat.EAT_NONE
-            id_ = get_id(xchat.get_context())
+                return hexchat.EAT_NONE
+            id_ = get_id(hexchat.get_context())
             if id_ not in KEY_MAP:
-                return xchat.EAT_NONE
+                return hexchat.EAT_NONE
             key = KEY_MAP[id_]
             server, cmd, nick, channel, topic = word[0], word[1], word[2], word[3], word_eol[4]
             if topic[0] == ':':
                 topic = topic[1 : ]
             if not topic.startswith('+AES '):
-                return xchat.EAT_NONE
+                return hexchat.EAT_NONE
             topic = decrypt(key, topic)
             set_processing()
-            xchat.command('RECV %s %s %s %s :%s' % (server, cmd, nick, channel, topic))
+            hexchat.command('RECV %s %s %s %s :%s' % (server, cmd, nick, channel, topic))
             unset_processing()
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
 
 def change_nick(word, word_eol, userdata):
             old, new = word[0], word[1]
-            old_id = (old, xchat.get_info('server'))
-            new_id = (new, xchat.get_info('server'))
+            old_id = (old, hexchat.get_info('server'))
+            new_id = (new, hexchat.get_info('server'))
             try:
                 KEY_MAP[new_id] = KEY_MAP[old_id]
                 del KEY_MAP[old_id]
             except KeyError:
                 pass
-            return xchat.EAT_NONE
+            return hexchat.EAT_NONE
 
 def aes(word, word_eol, userdata):
-        ctx = xchat.get_context()
+        ctx = hexchat.get_context()
         target = ctx.get_info('channel')
         if len(word) >= 2:
             target = word[1]
@@ -776,7 +776,7 @@ def aes(word, word_eol, userdata):
             key = KEY_MAP[id_]
         except KeyError:
             print 'Key don\'t exist!'
-            return xchat.EAT_ALL
+            return hexchat.EAT_ALL
         if len(word) >= 3 and word[2] != '--network':
             if word_eol[2]=="1" or word_eol[2]=="True" or word_eol[2]=="true":
                 key.aes = True
@@ -789,21 +789,21 @@ def aes(word, word_eol, userdata):
             if word_eol[4]=="0" or word_eol[4]=="False" or word_eol[4]=="false":
                 key.aes = False
         print 'Key aes', id_, 'set', key.aes
-        return xchat.EAT_ALL
+        return hexchat.EAT_ALL
 
-import xchat
-xchat.hook_command('key', key, help='show information or set key, /key <nick> [<--network> <network>] [new_key]')
-xchat.hook_command('key_exchange', key_exchange, help='exchange a new key, /key_exchange <nick>')
-xchat.hook_command('key_list', key_list, help='list keys, /key_list')
-xchat.hook_command('key_load', key_load, help='load keys, /key_load')
-xchat.hook_command('key_pass', key_pass, help='set key file pass, /key_pass password')
-xchat.hook_command('aes', aes, help='aes #channel/nick 1|0 or True|False')
-xchat.hook_command('key_remove', key_remove, help='remove key, /key_remove <nick>')
-xchat.hook_server('notice', dh1080)
-xchat.hook_print('Channel Message', decrypt_print, 'Channel Message')
-xchat.hook_print('Change Nick', change_nick)
-xchat.hook_print('Private Message to Dialog', decrypt_print, 'Private Message to Dialog')
-xchat.hook_server('332', server_332)
-xchat.hook_command('', encrypt_privmsg)
-xchat.hook_unload(unload)
+import hexchat
+hexchat.hook_command('key', key, help='show information or set key, /key <nick> [<--network> <network>] [new_key]')
+hexchat.hook_command('key_exchange', key_exchange, help='exchange a new key, /key_exchange <nick>')
+hexchat.hook_command('key_list', key_list, help='list keys, /key_list')
+hexchat.hook_command('key_load', key_load, help='load keys, /key_load')
+hexchat.hook_command('key_pass', key_pass, help='set key file pass, /key_pass password')
+hexchat.hook_command('aes', aes, help='aes #channel/nick 1|0 or True|False')
+hexchat.hook_command('key_remove', key_remove, help='remove key, /key_remove <nick>')
+hexchat.hook_server('notice', dh1080)
+hexchat.hook_print('Channel Message', decrypt_print, 'Channel Message')
+hexchat.hook_print('Change Nick', change_nick)
+hexchat.hook_print('Private Message to Dialog', decrypt_print, 'Private Message to Dialog')
+hexchat.hook_server('332', server_332)
+hexchat.hook_command('', encrypt_privmsg)
+hexchat.hook_unload(unload)
 load()
